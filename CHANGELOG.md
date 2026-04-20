@@ -5,7 +5,7 @@ All notable changes to voicehook-skill. Format: [Keep a Changelog](https://keepa
 ## [Unreleased]
 
 ### Planned
-- v0.3: implement `REDACT_PATTERNS` in `voicehook_hook.py` (currently only length-cap)
+
 - v0.3: `delta.py uninstall` command for one-shot cleanup
 - v0.3: `delta.py install --dry-run` to preview hook diff before write
 - v0.4: explicit `AskUserQuestion` step inside the skill before hook write

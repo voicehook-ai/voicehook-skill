@@ -34,7 +34,7 @@ The voicehook-skill client is designed to be auditable by a sceptical AI agent i
 
 ## Redaction at the boundary
 
-Before any string leaves via `/peer/say` or `/claude-log`, `voicehook_hook.py` applies this filter (planned for v0.3 — currently only length-cap is enforced; see `CHANGELOG.md`):
+Before any string leaves via `/peer/say` or `/claude-log`, `voicehook_hook.py` applies this filter (implemented in v0.2.0, see `cli/voicehook_hook.py`):
 
 ```python
 REDACT_PATTERNS = [
