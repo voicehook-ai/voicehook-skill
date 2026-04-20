@@ -177,7 +177,7 @@ def cmd_listen(args: argparse.Namespace) -> None:
         print()
 
 
-SUBCOMMANDS = {"calls", "listen", "interrupt", "summarize", "peer", "help"}
+SUBCOMMANDS = {"calls", "listen", "interrupt", "summarize", "peer", "join", "help", "install", "uninstall"}
 
 
 def cmd_join(args: argparse.Namespace) -> None:
@@ -281,6 +281,95 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     res = _post(f"/summarize/{sid}", body)
     state = "ON" if res.get("summarize_active") else "OFF"
     print(f"∆ summarize {state} interval={res.get('interval')}s → {res['session_id']}")
+
+
+_HOOK_COMMAND_SIGNATURE = "voicehook_hook.py"  # used to find & remove our own hooks
+
+
+def _build_hook_block(identity: str, control_url: str, hook_script: str, speak_stop: bool = False) -> dict:
+    env_base = f"env VOICEHOOK_PEER_ID={identity} VOICEHOOK_CONTROL_URL={control_url}"
+    env_stop = f"{env_base} VOICEHOOK_PEER_SPEAK_STOP=1" if speak_stop else env_base
+    return {
+        "hooks": {
+            "PostToolUse": [
+                {
+                    "matcher": "Bash|WebFetch|WebSearch|Task",
+                    "hooks": [{"type": "command", "command": f"{env_base} {hook_script}"}],
+                }
+            ],
+            "Stop": [
+                {
+                    "hooks": [{"type": "command", "command": f"{env_stop} {hook_script}"}],
+                }
+            ],
+        }
+    }
+
+
+def cmd_install(args: argparse.Namespace) -> None:
+    import pathlib
+    settings_path = pathlib.Path(args.settings)
+    existing: dict = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text())
+        except Exception as e:
+            _die(f"cannot parse {settings_path}: {e}")
+
+    new_hooks = _build_hook_block(args.identity, args.control_url, args.hook_script)["hooks"]
+    merged = dict(existing)
+    merged_hooks = dict(merged.get("hooks") or {})
+    for event, entries in new_hooks.items():
+        current = list(merged_hooks.get(event) or [])
+        # drop any existing voicehook entries (idempotent reinstall)
+        current = [e for e in current if _HOOK_COMMAND_SIGNATURE not in json.dumps(e)]
+        current.extend(entries)
+        merged_hooks[event] = current
+    merged["hooks"] = merged_hooks
+
+    new_text = json.dumps(merged, indent=2, ensure_ascii=False)
+    if args.dry_run:
+        sys.stderr.write("─── DRY RUN — would write to " + str(settings_path) + " ───\n")
+        sys.stderr.write(new_text + "\n")
+        sys.stderr.write("─── end dry-run (no changes made) ───\n")
+        return
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(new_text + "\n")
+    print(f"∆ installed — identity={args.identity} control={args.control_url}")
+
+
+def cmd_uninstall(args: argparse.Namespace) -> None:
+    import pathlib
+    settings_path = pathlib.Path(args.settings)
+    if not settings_path.exists():
+        print(f"∆ nothing to uninstall: {settings_path} does not exist")
+        return
+    try:
+        data = json.loads(settings_path.read_text())
+    except Exception as e:
+        _die(f"cannot parse {settings_path}: {e}")
+
+    hooks = dict(data.get("hooks") or {})
+    removed = 0
+    for event, entries in list(hooks.items()):
+        kept = [e for e in (entries or []) if _HOOK_COMMAND_SIGNATURE not in json.dumps(e)]
+        removed += len(entries or []) - len(kept)
+        if kept:
+            hooks[event] = kept
+        else:
+            hooks.pop(event, None)
+    if hooks:
+        data["hooks"] = hooks
+    else:
+        data.pop("hooks", None)
+
+    new_text = json.dumps(data, indent=2, ensure_ascii=False)
+    if args.dry_run:
+        sys.stderr.write(f"─── DRY RUN — would remove {removed} voicehook hook entries from {settings_path} ───\n")
+        sys.stderr.write(new_text + "\n")
+        return
+    settings_path.write_text(new_text + "\n")
+    print(f"∆ uninstalled — {removed} voicehook hook entries removed from {settings_path}")
 
 
 def _build_inject_parser() -> argparse.ArgumentParser:
@@ -388,6 +477,30 @@ def main(argv: list[str] | None = None) -> None:
 
     if first == "help":
         _build_inject_parser().print_help()
+        return
+
+    if first == "uninstall":
+        argv.remove("uninstall")
+        sp = argparse.ArgumentParser(prog="∆ uninstall",
+            description="Remove voicehook hooks from .claude/settings.local.json (idempotent). Does not delete the script files.")
+        sp.add_argument("--settings", default=".claude/settings.local.json",
+                        help="path to Claude Code settings (default: .claude/settings.local.json)")
+        sp.add_argument("--dry-run", action="store_true",
+                        help="show what would change without writing")
+        cmd_uninstall(sp.parse_args(argv))
+        return
+
+    if first == "install":
+        argv.remove("install")
+        sp = argparse.ArgumentParser(prog="∆ install",
+            description="Install voicehook hooks into .claude/settings.local.json. --dry-run shows the exact JSON diff before writing.")
+        sp.add_argument("--settings", default=".claude/settings.local.json")
+        sp.add_argument("--identity", default=os.getenv("VOICEHOOK_PEER_ID", "claude"))
+        sp.add_argument("--control-url", default=os.getenv("VOICEHOOK_CONTROL_URL", "https://voicehook.ai/api/control"))
+        sp.add_argument("--hook-script", default=os.path.expanduser("~/bin/voicehook_hook.py"))
+        sp.add_argument("--dry-run", action="store_true",
+                        help="preview the JSON that would be written; do not write")
+        cmd_install(sp.parse_args(argv))
         return
 
     # Default: inject / say / status

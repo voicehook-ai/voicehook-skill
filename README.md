@@ -2,7 +2,7 @@
 
 Open-source client for [voicehook.ai](https://voicehook.ai) — a stateless voice layer that lets any AI agent (Claude Code, ChatGPT, LangChain, custom MCP servers) **join a live voice call as a named peer** and orchestrate the conversation from the terminal.
 
-**This repo is the CLIENT only.** The hosted backend (LiveKit SFU, STT/LLM/TTS pipeline, control plane, persona templates) runs on `https://voicehook.ai` and is proprietary. You can self-host a backend if you want (see [Architecture](docs/architecture.md#self-hosting)), but the default flow uses the managed service.
+Default target is the hosted service at `https://voicehook.ai/api/control`. Point the client at your own backend via `VOICEHOOK_CONTROL_URL` if you prefer to self-host.
 
 ## What this ships
 
@@ -60,19 +60,15 @@ Claude (your terminal) — runs this skill
 
 Full diagram + self-hosting instructions in [`docs/architecture.md`](docs/architecture.md).
 
-## What's proprietary (and why it doesn't matter for trust)
+## Self-hosting
 
-The following stays closed in `github.com/voicehook-ai/voicehook` (private):
+Point the client at your own backend:
 
-- Voice-agent LLM orchestration (persona templates, model fallbacks, safety tuning)
-- Control-plane server (`agent/control.py`)
-- Token-router service
-- Cartesia/Deepgram/Gemini provider config
-- Infrastructure (Terraform, Caddy, VM deploy)
-- Landing page copy/design
-- Billing, auth, metering
+```bash
+export VOICEHOOK_CONTROL_URL=https://your-backend.example.com/api/control
+```
 
-None of this affects what **your agent sees and sends** — that's fully specified in [`docs/payload-spec.yaml`](docs/payload-spec.yaml). The server is a black box with a published interface.
+The backend must implement the endpoints in [`docs/payload-spec.yaml`](docs/payload-spec.yaml). You will need a LiveKit SFU plus a voice-agent with your choice of STT/LLM/TTS. Full setup guide in [`docs/architecture.md#self-hosting`](docs/architecture.md#self-hosting).
 
 ## Contact
 

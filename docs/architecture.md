@@ -64,7 +64,7 @@ File contents, full tool outputs, complete commands — none of this leaves the 
 
 ## What the control plane does with that
 
-The server (proprietary, not in this repo):
+The server:
 
 1. Receives peer-events, stores nothing on disk — pushed to an in-memory ring buffer per session (max 50 events, session-lifetime TTL).
 2. Broadcasts to the transcript WebSocket so the browser shows the event live.
@@ -87,20 +87,4 @@ Requirements for a compatible backend:
 - An HTTP service exposing the endpoints in [`payload-spec.yaml`](payload-spec.yaml)
 - TLS termination in front of the control plane
 
-The open-source client works against any backend that implements the spec — but **most of the value** (tuned personas, DACH-DSGVO hosting, DPA, multi-region failover, persona marketplace) is in the managed service at `voicehook.ai`. Self-hosting is viable for tinkerers and compliance-restricted deploys; it is not the happy path.
-
-## Moat (why this open repo doesn't hurt voicehook.ai)
-
-| Layer | Hosted at voicehook.ai | In this repo |
-|---|---|---|
-| Client skill + hook | — | ✅ open |
-| OpenAPI spec | — | ✅ open |
-| Provider accounts (Deepgram, Cartesia, Gemini) | proprietary | — |
-| Persona-templates + prompt-craft | proprietary | — |
-| Voice-agent orchestration code | proprietary | — |
-| Billing + auth + dashboard | proprietary | — |
-| Infrastructure (Terraform, Caddy, SFU) | proprietary | — |
-| DSGVO + DPA + SLA | proprietary | — |
-| Brand, domain, `∆` mark | trademarked | — |
-
-Cloning this repo gives you a client. Running it against your own infra means reproducing the proprietary 80% first. That's the moat.
+The client works against any backend that implements the spec. Running the hosted service at `voicehook.ai` gets you DACH-EU hosting, DPA on request, and a maintained STT/LLM/TTS pipeline out of the box; self-hosting gives you full control over the stack.
