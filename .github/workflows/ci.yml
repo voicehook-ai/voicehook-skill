@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  python-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tools
+        run: |
+          pip install ruff bandit
+      - name: ruff (style)
+        run: ruff check cli/
+      - name: bandit (security lints)
+        run: bandit -r cli/ -ll
+
+  openapi-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install swagger-cli
+        run: npm install -g @apidevtools/swagger-cli
+      - name: Validate OpenAPI spec
+        run: swagger-cli validate docs/payload-spec.yaml
+
+  skill-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SKILL.md must have frontmatter
+        run: |
+          head -1 SKILL.md | grep -q '^---$' || (echo "SKILL.md missing frontmatter" && exit 1)
+      - name: SKILL.md must declare version
+        run: grep -E '^\s*version:\s*"?[0-9]+\.[0-9]+\.[0-9]+"?' SKILL.md
+      - name: SKILL.md must mention handover mandatory
+        run: grep -iq 'KERN-INVARIANTE\|handover is mandatory' SKILL.md

@@ -1,0 +1,245 @@
+openapi: 3.0.3
+info:
+  title: voicehook.ai Control Plane — client-visible surface
+  description: |
+    This is the COMPLETE list of endpoints the `voicehook-skill` client uses.
+    Anything not in this document is NOT called by the client. Verify locally
+    with a proxy (mitmproxy, Charles) — if you see another endpoint, file a bug.
+  version: "0.2.0"
+  contact:
+    email: security@voicehook.ai
+    name: voicehook.ai security
+servers:
+  - url: https://voicehook.ai/api/control
+    description: Managed service (default)
+  - url: http://127.0.0.1:7300
+    description: Local loopback (only reachable if you self-host a backend)
+
+paths:
+  /sessions:
+    get:
+      summary: List active voice sessions
+      description: |
+        Used by the skill's pre-flight check and the minute-cron reminder to
+        find the currently active session before any other action.
+      responses:
+        '200':
+          description: Array of active sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+        '502':
+          description: |
+            Control server not bound. This is normal when no job-subprocess
+            has been spawned yet. Not an error — retry or dispatch first.
+
+  /inject:
+    post:
+      summary: Inject a message into the voice-agent's chat context
+      description: |
+        Used for the MANDATORY handover at join (role=system, mode=silent) and
+        for rare mid-call corrections. Default is append to existing system
+        context; use `system_mode: replace` only on genuine context switches.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjectRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  session_id: {type: string}
+
+  /peer/say:
+    post:
+      summary: Broadcast a peer message (optionally spoken)
+      description: |
+        Used for the join-greeting and for direct voice interventions by Claude
+        during the call. `speak: false` = text-only in transcript; `speak: true`
+        = also synthesized via Cartesia into the room audio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerSayRequest'
+      responses:
+        '200':
+          description: Broadcast accepted (and queued for TTS if speak=true)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  session_id: {type: string}
+                  identity: {type: string}
+
+  /claude-log/{session_id}:
+    post:
+      summary: Append a tool event to Claude's session log
+      description: |
+        Used by the PostToolUse / Stop hooks to push Claude's tool activity to
+        the server. Payload is deliberately minimal — tool name + one short
+        hint, capped at 200 chars. Never sends file contents or tool outputs.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaudeLogEntry'
+      responses:
+        '200':
+          description: Appended to ring buffer
+    get:
+      summary: Read last N entries from Claude's session log
+      description: |
+        Used by the voice-agent (server-side tool call) when the human asks
+        "what is Claude doing right now". Also available for the skill's own
+        reminder-tick.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: n
+          in: query
+          schema: {type: integer, default: 20, maximum: 50}
+      responses:
+        '200':
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  session_id: {type: string}
+                  events:
+                    type: array
+                    items: {$ref: '#/components/schemas/ClaudeLogEntry'}
+
+  /interrupt:
+    post:
+      summary: Interrupt the voice-agent mid-speech
+      description: |
+        Used when Claude needs to stop Delta from monologuing before injecting
+        a correction. Idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id: {type: string, nullable: true}
+                force: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Interrupted
+
+  /transcript/{session_id}:
+    get:
+      summary: WebSocket transcript stream
+      description: |
+        Upgrade to WebSocket to receive live user/assistant/peer/injection/close
+        events. On connect, the server replays the current buffered transcript,
+        then streams new events push-based. Used by the skill for between-turn
+        intervention decisions.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '101':
+          description: Switching Protocols — WebSocket upgrade
+
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        description: Session ID from `/sessions`, or `_latest` for the newest
+
+  schemas:
+    Session:
+      type: object
+      properties:
+        session_id: {type: string}
+        room_name: {type: string}
+        model: {type: string, example: gemini-flash-lite}
+        started_at: {type: number, description: Unix timestamp}
+        age_seconds: {type: number}
+        pii_mode: {type: string, enum: [off, presidio]}
+
+    InjectRequest:
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1}
+        role: {type: string, enum: [system, user, assistant], default: system}
+        mode:
+          type: string
+          enum: [silent, trigger]
+          default: silent
+          description: silent = add to context for next turn; trigger = generate reply now
+        system_mode:
+          type: string
+          enum: [append, replace]
+          default: append
+          description: |
+            append: add to existing system context (default, cumulative).
+            replace: purge existing system messages first — use only on context switch.
+        session_id:
+          type: string
+          nullable: true
+          description: If null, applies to most-recent session
+
+    PeerSayRequest:
+      type: object
+      required: [identity, text]
+      properties:
+        identity:
+          type: string
+          pattern: '^[a-z0-9-]{2,40}$'
+          example: claude
+        text: {type: string, minLength: 1, maxLength: 500}
+        speak:
+          type: boolean
+          default: false
+          description: If true, synthesize via Cartesia into the room audio
+        session_id: {type: string, nullable: true}
+
+    ClaudeLogEntry:
+      type: object
+      properties:
+        t: {type: number, description: Unix timestamp}
+        tool:
+          type: string
+          nullable: true
+          example: Bash
+          description: Claude Code tool name
+        detail:
+          type: string
+          maxLength: 200
+          description: |
+            Single informative field from tool_input — typically `command`,
+            `url`, `path`, or `description`. Capped at 200 chars. NEVER file
+            contents or tool outputs.
+        text:
+          type: string
+          maxLength: 200
+          description: Free-form note (used for Stop events, narrator summaries)
+        identity:
+          type: string
+          example: claude
