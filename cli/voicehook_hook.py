@@ -45,7 +45,7 @@ _REDACT_PATTERNS = [
     r"ghs_[A-Za-z0-9]{36}",                          # GitHub server
     r"github_pat_[A-Za-z0-9_]{22,}",                 # GitHub fine-grained
     r"xox[baprs]-[A-Za-z0-9-]{10,}",                 # Slack
-    r"(?i)bearer\s+[A-Za-z0-9._~+/-]{20,}",          # Bearer tokens
+    r"(?i:bearer\s+[A-Za-z0-9._~+/-]{20,})",         # Bearer tokens (scoped ignore-case)
     r"AIza[A-Za-z0-9_-]{35}",                        # Google API key
     r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END",
 ]
