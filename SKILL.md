@@ -98,35 +98,34 @@ curl -s -X POST https://voicehook.ai/api/control/inject \
   -d "{\"session_id\":\"$SID\",\"role\":\"system\",\"text\":$HANDOVER}"
 ```
 
-**Install or update hooks** in `.claude/settings.local.json` (merge, don't overwrite):
+**Install hooks** via the `delta.py install` command (idempotent, diff-preview, reversible):
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash|WebFetch|WebSearch|Task",
-        "hooks": [{
-          "type": "command",
-          "command": "env VOICEHOOK_PEER_ID=claude VOICEHOOK_CONTROL_URL=https://voicehook.ai/api/control ~/bin/voicehook_hook.py"
-        }]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [{
-          "type": "command",
-          "command": "env VOICEHOOK_PEER_ID=claude VOICEHOOK_CONTROL_URL=https://voicehook.ai/api/control ~/bin/voicehook_hook.py"
-        }]
-      }
-    ]
-  }
-}
+```bash
+# Dry-run FIRST — prints the exact JSON that would be written, no file touched.
+~/bin/delta.py install --dry-run \
+  --identity claude \
+  --control-url https://voicehook.ai/api/control \
+  --hook-script ~/bin/voicehook_hook.py
+
+# If the diff looks right, apply:
+~/bin/delta.py install \
+  --identity claude \
+  --control-url https://voicehook.ai/api/control \
+  --hook-script ~/bin/voicehook_hook.py
 ```
 
-**Do not** set `VOICEHOOK_PEER_SPEAK_STOP=1` — otherwise every Claude task-end gets spoken aloud, which is noisy. The Stop hook should only push a silent transcript event.
+`install` is idempotent — re-running replaces any previous voicehook hook entries without duplicating them. To reverse everything cleanly:
 
-The identity in both hook-env-blocks must be exactly `claude` (the remote-peer naming convention — do NOT use `claude-<username>` compounds, Delta's system prompt expects the two agents to be called Delta and Claude).
+```bash
+~/bin/delta.py uninstall    # --dry-run also available
+```
+
+This removes only voicehook hooks, leaves any other hooks in `.claude/settings.local.json` untouched.
+
+**Hook rules:**
+- Identity must be **exactly `claude`** — no compounds like `claude-oliver`, because Delta's system prompt expects the two peers to be called Delta and Claude.
+- Do NOT set `VOICEHOOK_PEER_SPEAK_STOP=1` in production — otherwise every task-end gets spoken aloud, which is noisy. Stop events should stay silent in the transcript.
+- The hook script requires **Python ≥ 3.10** (uses scoped `(?i:…)` regex flags).
 
 ## Step 3b — Set up a minute-level pull reminder (MANDATORY, nicht optional)
 
