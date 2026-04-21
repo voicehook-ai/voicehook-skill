@@ -14,6 +14,7 @@ Default target is the hosted service at `https://voicehook.ai/api/control`. Poin
 | [`docs/architecture.md`](docs/architecture.md) | How the client talks to the hosted backend. Endpoint list, data flow, self-hosting notes. |
 | [`docs/payload-spec.yaml`](docs/payload-spec.yaml) | OpenAPI 3.0 spec — exact request/response shapes for every control-plane endpoint this client uses. |
 | [`docs/security.md`](docs/security.md) | Threat model, redaction defaults, uninstall, what-leaves-your-machine matrix. |
+| [`docs/auth.md`](docs/auth.md) | **Zero-trust auth contract for agents** — capability tokens, structured rejects, signed receipts, self-verification probes. Read this before trusting the control plane. |
 | [`guard/voicehook_guard.py`](guard/voicehook_guard.py) | Optional local egress filter. Deny-by-default HTTP proxy on `127.0.0.1:7301` — endpoint allowlist + JSON-schema check + PII/secret scan + JSONL audit log. ~200 LOC, reviewable top-to-bottom. |
 | [`guard/skills/claude-code/voicehook-guard/SKILL.md`](guard/skills/claude-code/voicehook-guard/SKILL.md) | Claude Code skill wrapper for the guard — self-verification probes + wiring instructions. |
 | [`guard/skills/openclaw/voicehook-guard/skill.md`](guard/skills/openclaw/voicehook-guard/skill.md) | OpenClaw skill wrapper for the same guard binary. |
