@@ -4,11 +4,17 @@ All notable changes to voicehook-skill. Format: [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Added
+
+- `guard/` — voicehook-guard local egress filter (v0.1.0). Deny-by-default FastAPI proxy on `127.0.0.1:7301` with endpoint allowlist, JSON-schema validation, PII scan (scrubadub), and secret-regex scan. Ships with Claude Code + OpenClaw skill wrappers. Same `voicehook_guard.py` is the trust anchor for both frameworks — SHA256 in `SHA256SUMS.txt`.
+
 ### Planned
 
 - v0.3: `delta.py uninstall` command for one-shot cleanup
 - v0.3: `delta.py install --dry-run` to preview hook diff before write
 - v0.4: explicit `AskUserQuestion` step inside the skill before hook write
+- v0.4: `voicehook-guard verify` subcommand bundling the four self-verification probes
+- v0.4: `pyproject.toml` for `pipx install voicehook-guard`
 
 ## [0.2.0] — 2026-04-20
 
